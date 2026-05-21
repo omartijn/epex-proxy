@@ -1,0 +1,45 @@
+#!/bin/sh
+set -e
+
+# Create the system user/group if they don't exist yet
+if ! getent group epex-proxy >/dev/null; then
+    addgroup --system epex-proxy
+fi
+if ! getent passwd epex-proxy >/dev/null; then
+    adduser --system --ingroup epex-proxy --no-create-home \
+            --home /var/lib/epex-proxy --shell /usr/sbin/nologin epex-proxy
+fi
+
+# Data directory (StateDirectory= in the unit handles this on modern systemd,
+# but create it here too so the paths exist before first boot)
+mkdir -p /var/lib/epex-proxy
+chown epex-proxy:epex-proxy /var/lib/epex-proxy
+chmod 750 /var/lib/epex-proxy
+
+# Config directory
+mkdir -p /etc/epex-proxy
+
+# Seed an example config on first install (never overwrite on upgrade)
+if [ ! -f /etc/epex-proxy/config.json ]; then
+    cp /usr/share/epex-proxy/config.json.example /etc/epex-proxy/config.json
+    echo "epex-proxy: example config installed to /etc/epex-proxy/config.json"
+    echo "  Edit it and place your ENTSOE_TOKEN in /etc/epex-proxy/environment"
+fi
+
+# Create environment file holding the API token (never overwrite on upgrade)
+if [ ! -f /etc/epex-proxy/environment ]; then
+    printf 'ENTSOE_TOKEN=\n' > /etc/epex-proxy/environment
+    chmod 640 /etc/epex-proxy/environment
+    chown root:epex-proxy /etc/epex-proxy/environment
+fi
+
+# Enable and (re)start the service when systemd is running
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload
+    systemctl enable epex-proxy.service || true
+    if [ "$1" = "configure" ]; then
+        systemctl restart epex-proxy.service || true
+    fi
+fi
+
+exit 0

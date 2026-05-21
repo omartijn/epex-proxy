@@ -1,0 +1,43 @@
+services:
+
+  epex-proxy:
+    build: .
+    container_name: epex-proxy
+    restart: unless-stopped
+    environment:
+      # Set in a .env file alongside this compose file:
+      #   echo "ENTSOE_TOKEN=your_token" > .env
+      ENTSOE_TOKEN: "${ENTSOE_TOKEN:?ENTSOE_TOKEN must be set (add it to .env)}"
+    volumes:
+      - ./docker/config.json:/etc/epex-proxy/config.json:ro
+      - epex-data:/var/lib/epex-proxy
+    expose:
+      - "8080"
+    networks:
+      - web
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    environment:
+      EPEX_DOMAIN: "${EPEX_DOMAIN:?EPEX_DOMAIN must be set (add it to .env)}"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # QUIC / HTTP3
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - web
+
+volumes:
+  epex-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  web:
+    driver: bridge

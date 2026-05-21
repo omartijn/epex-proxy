@@ -1,0 +1,3 @@
+{env.EPEX_DOMAIN} {
+    reverse_proxy epex-proxy:8080
+}

@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+# Stop and (on full removal) disable the service before the binary is deleted
+if [ -d /run/systemd/system ]; then
+    if [ "$1" = "remove" ] || [ "$1" = "upgrade" ]; then
+        systemctl stop epex-proxy.service || true
+    fi
+    if [ "$1" = "remove" ]; then
+        systemctl disable epex-proxy.service || true
+    fi
+fi
+
+exit 0

@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+
+if [ -d /run/systemd/system ]; then
+    if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+        systemctl daemon-reload
+    fi
+fi
+
+# Purge: remove config and data dirs
+# (We intentionally do NOT remove the system user — it may own other files)
+if [ "$1" = "purge" ]; then
+    rm -rf /etc/epex-proxy
+    rm -rf /var/lib/epex-proxy
+fi
+
+exit 0
