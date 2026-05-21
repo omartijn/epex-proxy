@@ -1,0 +1,56 @@
+---
+# Requires compile_commands.json.
+# Enable in CMake with: set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# Run with: clang-tidy -p build src/**/*.cpp src/**/*.hpp
+
+Checks: >-
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  modernize-avoid-bind,
+  modernize-loop-convert,
+  modernize-make-shared,
+  modernize-make-unique,
+  modernize-pass-by-value,
+  modernize-redundant-void-arg,
+  modernize-shrink-to-fit,
+  modernize-use-auto,
+  modernize-use-bool-literals,
+  modernize-use-default-member-init,
+  modernize-use-emplace,
+  modernize-use-equals-default,
+  modernize-use-equals-delete,
+  modernize-use-nodiscard,
+  modernize-use-noexcept,
+  modernize-use-nullptr,
+  modernize-use-override,
+  modernize-use-using,
+  performance-*,
+  readability-braces-around-statements,
+  readability-const-return-type,
+  readability-container-size-empty,
+  readability-delete-null-pointer,
+  readability-else-after-return,
+  readability-make-member-function-const,
+  readability-misleading-indentation,
+  readability-non-const-parameter,
+  readability-qualified-auto,
+  readability-redundant-control-flow,
+  readability-redundant-member-init,
+  readability-redundant-smartptr-get,
+  readability-redundant-string-cstr,
+  readability-redundant-string-init,
+  readability-simplify-boolean-expr,
+  readability-static-accessed-through-instance,
+  readability-static-definition-in-anonymous-namespace,
+  readability-string-compare,
+  readability-uniqueptr-delete-release,
+  -bugprone-easily-swappable-parameters,
+  -modernize-use-trailing-return-type,
+
+WarningsAsErrors: "*"
+FormatStyle:      file
+
+# Only surface diagnostics from our own headers, not Boost/STL/FetchContent internals.
+# Matches only files directly under the project's src/ tree, not build/_deps/*/src/.
+HeaderFilterRegex: "^.*/open-epex\\.eu/src/.*\\.hpp$"

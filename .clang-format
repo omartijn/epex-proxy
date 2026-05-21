@@ -1,0 +1,55 @@
+---
+Language:     Cpp
+BasedOnStyle: LLVM
+Standard:     Latest
+IndentWidth:  4
+ColumnLimit:  100
+
+# Braces: function bodies on their own line; structs, control flow attached.
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass:            false
+  AfterControlStatement: Never
+  AfterEnum:             false
+  AfterFunction:         true
+  AfterNamespace:        false
+  AfterStruct:           false
+  AfterUnion:            false
+  AfterExternBlock:      false
+  BeforeCatch:           false
+  BeforeElse:            false
+  BeforeLambdaBody:      false
+  IndentBraces:          false
+  SplitEmptyFunction:    false
+  SplitEmptyRecord:      false
+  SplitEmptyNamespace:   false
+
+# Pointers and references bind left: `int* p`, `const Foo& f`
+PointerAlignment:   Left
+ReferenceAlignment: Left
+
+# Parameters / arguments: all on one line, or one per line — no bin-packing.
+BinPackParameters: false
+BinPackArguments:  false
+
+# Disallow collapsing constructs onto a single line (except inline lambdas).
+AllowShortBlocksOnASingleLine:       Never
+AllowShortFunctionsOnASingleLine:    None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine:        false
+AllowShortLambdasOnASingleLine:      Inline
+
+# Includes: regroup into three blocks — project, third-party, standard library.
+SortIncludes:  true
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex:    '^"'
+    Priority: 1
+  - Regex:    '^<(boost|nlohmann|pugixml)'
+    Priority: 2
+  - Regex:    '^<'
+    Priority: 3
+
+# Misc
+SpacesBeforeTrailingComments: 2
+Cpp11BracedListStyle:         true
