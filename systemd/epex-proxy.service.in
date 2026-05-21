@@ -1,0 +1,20 @@
+[Unit]
+Description=EPEX Day-Ahead Price Proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=epex-proxy
+Group=epex-proxy
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/epex-proxy /etc/epex-proxy/config.json
+Restart=always
+RestartSec=5
+# Create /etc/epex-proxy/environment with: ENTSOE_TOKEN=your_token_here
+EnvironmentFile=/etc/epex-proxy/environment
+StateDirectory=epex-proxy
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

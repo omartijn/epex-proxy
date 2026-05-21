@@ -1,0 +1,551 @@
+openapi: 3.1.0
+
+info:
+  title: EPEX Day-Ahead Price API
+  version: "1"
+  summary: Public Dutch EPEX day-ahead quarter-hourly electricity prices
+  description: |
+    Republishes Dutch EPEX day-ahead electricity prices from the ENTSO-E
+    Transparency Platform with attribution. Data is mandated public by EU law
+    and is available here without registration or tokens.
+
+    Prices are published by ENTSO-E daily after approximately 12:30 CET for
+    the following day. This service fetches and caches them, then serves
+    pre-computed all-in prices for popular Dutch dynamic energy providers.
+
+    **No authentication required. All prices in EUR.**
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://epex.example.com
+    description: Public instance
+
+security: []  # no authentication required
+
+tags:
+  - name: prices
+    description: Day-ahead price data
+  - name: meta
+    description: Provider configuration and service health
+
+paths:
+
+  /health:
+    get:
+      operationId: getHealth
+      tags: [meta]
+      summary: Service health and data freshness
+      description: |
+        Returns the fetch status for today and tomorrow for each area.
+
+        The `tomorrow` block includes retry state so operators can distinguish
+        "prices not yet published" from "broken token or network failure". The
+        top-level `status` field is `degraded` if today's data is missing for
+        any area.
+
+        This endpoint always returns HTTP 200; use the `status` field to detect
+        problems.
+      responses:
+        "200":
+          description: Health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                healthy:
+                  summary: Both days loaded
+                  value:
+                    status: ok
+                    areas:
+                      nl:
+                        today:
+                          date: "2026-05-18"
+                          slots: 96
+                        tomorrow:
+                          date: "2026-05-19"
+                          status: ok
+                          slots: 96
+                retrying:
+                  summary: Tomorrow prices not yet published
+                  value:
+                    status: ok
+                    areas:
+                      nl:
+                        today:
+                          date: "2026-05-18"
+                          slots: 96
+                        tomorrow:
+                          date: "2026-05-19"
+                          status: pending
+                          attempts: 3
+                          last_attempt: "2026-05-18T13:15:00Z"
+                          last_http_status: 400
+                          last_error: "<html>No matching data found</html>"
+
+  /v1/{area}/providers:
+    get:
+      operationId: listProviders
+      tags: [meta]
+      summary: List providers and their tariff components
+      description: |
+        Returns the tariff components used in the pricing formula for each
+        provider, along with the shared `energy_tax` and `vat_rate` for
+        this area. All rates are resolved for today's local date — tariff
+        schedules with future `valid_from` dates are not yet applied.
+      parameters:
+        - $ref: '#/components/parameters/area'
+      responses:
+        "200":
+          description: Provider list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvidersResponse'
+              example:
+                area: nl
+                energy_tax: 0.1108
+                vat_rate: 0.21
+                providers:
+                  energiek:
+                    name: Energiek
+                    delivery_fee: 0.018
+                    redelivery_fee: 0.0149
+                  tibber:
+                    name: Tibber
+                    delivery_fee: 0.0248
+                    redelivery_fee: 0.0248
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /v1/{area}/raw/{date}:
+    get:
+      operationId: getRawPrices
+      tags: [prices]
+      summary: Raw EPEX spot prices in €/MWh
+      description: |
+        Returns the unmodified EPEX day-ahead spot prices as published by
+        ENTSO-E, in €/MWh. No taxes or provider margins applied.
+
+        96 slots are returned for a full day (PT15M resolution). Timestamps
+        are in UTC; the `date` field reflects the calendar date in the area's
+        local timezone.
+      parameters:
+        - $ref: '#/components/parameters/area'
+        - $ref: '#/components/parameters/date'
+      responses:
+        "200":
+          description: Raw EPEX prices for the requested date
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RawPricesResponse'
+              example:
+                date: "2026-05-18"
+                area: "10YNL----------L"
+                resolution: PT15M
+                currency: EUR
+                unit: MWh
+                prices:
+                  - start: "2026-05-17T22:00:00Z"
+                    end: "2026-05-17T22:15:00Z"
+                    price: 68.42
+                  - start: "2026-05-17T22:15:00Z"
+                    end: "2026-05-17T22:30:00Z"
+                    price: 65.10
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+  /v1/{area}/{provider}/{date}:
+    get:
+      operationId: getProviderPrices
+      tags: [prices]
+      summary: All-in prices for a specific provider
+      description: |
+        Returns buy and sell prices in €/kWh for the given provider, with all
+        taxes and provider margins applied.
+
+        **Pricing formula (VAT-inclusive, the default):**
+        ```
+        buy  = epex_mwh / 1000 × (1 + vat_rate) + energy_tax + delivery_fee
+        sell = buy − redelivery_fee
+        ```
+
+        VAT applies only to the spot price. `energy_tax` and `delivery_fee`
+        are stored and returned as VAT-inclusive amounts (as published by the
+        tax authority and providers).
+
+        Use `?vat=false` for business consumers who reclaim BTW. VAT is
+        removed uniformly from the total:
+        ```
+        buy  = buy_incl_vat / (1 + vat_rate)
+        sell = sell_incl_vat / (1 + vat_rate)
+        ```
+
+        See `GET /v1/{area}/providers` for available provider IDs and their
+        current tariff components.
+      parameters:
+        - $ref: '#/components/parameters/area'
+        - $ref: '#/components/parameters/provider'
+        - $ref: '#/components/parameters/date'
+        - $ref: '#/components/parameters/vat'
+      responses:
+        "200":
+          description: All-in prices for the requested provider and date
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderPricesResponse'
+              example:
+                date: "2026-05-18"
+                provider: energiek
+                area: nl
+                currency: EUR
+                unit: kWh
+                vat_included: true
+                components:
+                  energy_tax: 0.1108
+                  vat_rate: 0.21
+                  delivery_fee: 0.018
+                  redelivery_fee: 0.0149
+                prices:
+                  - start: "2026-05-17T22:00:00Z"
+                    end: "2026-05-17T22:15:00Z"
+                    buy: 0.23284
+                    sell: 0.21794
+                  - start: "2026-05-17T22:15:00Z"
+                    end: "2026-05-17T22:30:00Z"
+                    buy: 0.22949
+                    sell: 0.21459
+        "404":
+          $ref: '#/components/responses/NotFound'
+
+components:
+
+  parameters:
+
+    area:
+      name: area
+      in: path
+      required: true
+      description: Bidding zone / country code.
+      schema:
+        type: string
+        enum: [nl]
+      example: nl
+
+    date:
+      name: date
+      in: path
+      required: true
+      description: |
+        Calendar date in the area's local timezone. Use `today` or `tomorrow`
+        as rolling aliases, or supply an explicit `YYYY-MM-DD` date.
+      schema:
+        type: string
+        pattern: '^(today|tomorrow|\d{4}-\d{2}-\d{2})$'
+      examples:
+        today:
+          value: today
+          summary: Current local date
+        tomorrow:
+          value: tomorrow
+          summary: Tomorrow's local date
+        explicit:
+          value: "2026-05-18"
+          summary: Explicit date
+
+    provider:
+      name: provider
+      in: path
+      required: true
+      description: |
+        Provider identifier. See `GET /v1/{area}/providers` for the current
+        list and their tariff components.
+      schema:
+        type: string
+        examples:
+          - energiek
+          - tibber
+          - frank
+          - anwb
+          - vandebron
+
+    vat:
+      name: vat
+      in: query
+      required: false
+      description: |
+        Set to `false` to return prices excluding VAT (BTW). Intended for
+        business consumers who reclaim VAT. Defaults to `true`.
+      schema:
+        type: boolean
+        default: true
+
+  responses:
+
+    NotFound:
+      description: No data for the requested date, or unknown area / provider.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            noData:
+              summary: Date not yet available
+              value:
+                error: not_found
+                reason: No data for this date
+            unknownProvider:
+              summary: Unknown provider ID
+              value:
+                error: not_found
+                reason: Unknown provider
+
+  schemas:
+
+    Timestamp:
+      type: string
+      format: date-time
+      description: UTC timestamp in ISO 8601 format.
+      examples:
+        - "2026-05-17T22:00:00Z"
+
+    RawPriceSlot:
+      type: object
+      required: [start, end, price]
+      properties:
+        start:
+          $ref: '#/components/schemas/Timestamp'
+        end:
+          $ref: '#/components/schemas/Timestamp'
+        price:
+          type: number
+          description: EPEX spot price in €/MWh.
+          examples: [68.42]
+
+    ProviderPriceSlot:
+      type: object
+      required: [start, end, buy, sell]
+      properties:
+        start:
+          $ref: '#/components/schemas/Timestamp'
+        end:
+          $ref: '#/components/schemas/Timestamp'
+        buy:
+          type: number
+          description: All-in buy price in €/kWh, rounded to 5 decimal places.
+          examples: [0.23284]
+        sell:
+          type: number
+          description: Feed-in (sell) price in €/kWh, rounded to 5 decimal places.
+          examples: [0.21794]
+
+    PriceComponents:
+      type: object
+      description: Tariff components resolved for the date of the price data and used in the pricing formula.
+      required: [energy_tax, vat_rate, delivery_fee, redelivery_fee]
+      properties:
+        energy_tax:
+          type: number
+          description: Dutch electricity tax (energiebelasting) in €/kWh, VAT-inclusive, resolved for the price date.
+          examples: [0.1108]
+        vat_rate:
+          type: number
+          description: VAT rate (BTW), e.g. `0.21` for 21%.
+          examples: [0.21]
+        delivery_fee:
+          type: number
+          description: Supplier delivery margin (inkoopvergoeding) in €/kWh, VAT-inclusive, resolved for the price date.
+          examples: [0.0248]
+        redelivery_fee:
+          type: number
+          description: Feed-in deduction (terugleververgoeding) in €/kWh, VAT-inclusive, resolved for the price date. Subtracted from the buy price to get the sell price.
+          examples: [0.0248]
+
+    RawPricesResponse:
+      type: object
+      required: [date, area, resolution, currency, unit, prices]
+      properties:
+        date:
+          type: string
+          format: date
+          description: Calendar date in the area's local timezone.
+          examples: ["2026-05-18"]
+        area:
+          type: string
+          description: ENTSO-E bidding zone EIC code.
+          examples: ["10YNL----------L"]
+        resolution:
+          type: string
+          description: Slot duration.
+          enum: [PT15M]
+        currency:
+          type: string
+          enum: [EUR]
+        unit:
+          type: string
+          description: Unit for the `price` field.
+          enum: [MWh]
+        prices:
+          type: array
+          description: Price slots ordered by start time, one per 15-minute interval. Always 96 entries for a full day.
+          items:
+            $ref: '#/components/schemas/RawPriceSlot'
+
+    ProviderPricesResponse:
+      type: object
+      required: [date, provider, area, currency, unit, vat_included, components, prices]
+      properties:
+        date:
+          type: string
+          format: date
+          examples: ["2026-05-18"]
+        provider:
+          type: string
+          description: Provider identifier as used in the request path.
+          examples: [energiek]
+        area:
+          type: string
+          examples: [nl]
+        currency:
+          type: string
+          enum: [EUR]
+        unit:
+          type: string
+          description: Unit for the `buy` and `sell` fields.
+          enum: [kWh]
+        vat_included:
+          type: boolean
+          description: Whether VAT (BTW) is included in the prices.
+        components:
+          $ref: '#/components/schemas/PriceComponents'
+        prices:
+          type: array
+          description: Price slots ordered by start time, one per 15-minute interval. Always 96 entries for a full day.
+          items:
+            $ref: '#/components/schemas/ProviderPriceSlot'
+
+    ProviderInfo:
+      type: object
+      required: [name, delivery_fee, redelivery_fee]
+      properties:
+        name:
+          type: string
+          description: Human-readable provider name.
+          examples: [Tibber]
+        delivery_fee:
+          type: number
+          description: Supplier delivery margin in €/kWh, VAT-inclusive.
+          examples: [0.0248]
+        redelivery_fee:
+          type: number
+          description: Feed-in deduction in €/kWh, VAT-inclusive.
+          examples: [0.0248]
+
+    ProvidersResponse:
+      type: object
+      required: [area, energy_tax, vat_rate, providers]
+      properties:
+        area:
+          type: string
+          examples: [nl]
+        energy_tax:
+          type: number
+          description: Dutch electricity tax in €/kWh, VAT-inclusive. Shared across all providers.
+          examples: [0.1108]
+        vat_rate:
+          type: number
+          description: VAT rate (BTW).
+          examples: [0.21]
+        providers:
+          type: object
+          description: Map of provider ID to tariff info.
+          additionalProperties:
+            $ref: '#/components/schemas/ProviderInfo'
+
+    TodayHealth:
+      type: object
+      required: [date]
+      properties:
+        date:
+          type: string
+          format: date
+        slots:
+          type: integer
+          description: Number of price slots loaded. Present when data is available.
+          examples: [96]
+        status:
+          type: string
+          description: Present only when data is unavailable.
+          enum: [missing]
+
+    TomorrowHealth:
+      type: object
+      required: [date, status]
+      properties:
+        date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [ok, pending, unavailable]
+          description: |
+            - `ok` — 96 slots loaded
+            - `pending` — actively retrying; prices not yet published or a transient failure
+            - `unavailable` — before 13:00 local time; fetch not yet attempted
+        slots:
+          type: integer
+          description: Number of price slots loaded. Present when `status` is `ok`.
+          examples: [96]
+        attempts:
+          type: integer
+          description: Number of fetch attempts made. Present when `status` is `pending`.
+        last_attempt:
+          $ref: '#/components/schemas/Timestamp'
+          description: Time of the last fetch attempt. Present when `status` is `pending`.
+        last_http_status:
+          type: integer
+          description: HTTP status from the last failed ENTSO-E request.
+          examples: [400]
+        last_error:
+          type: string
+          description: Truncated response body from the last failed request (≤ 512 chars).
+
+    AreaHealth:
+      type: object
+      required: [today, tomorrow]
+      properties:
+        today:
+          $ref: '#/components/schemas/TodayHealth'
+        tomorrow:
+          $ref: '#/components/schemas/TomorrowHealth'
+
+    HealthResponse:
+      type: object
+      required: [status, areas]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+          description: |
+            `degraded` when today's prices are missing for any area.
+            Always HTTP 200; check this field to detect problems.
+        areas:
+          type: object
+          description: Per-area health, keyed by area ID (e.g. `nl`).
+          additionalProperties:
+            $ref: '#/components/schemas/AreaHealth'
+
+    ErrorResponse:
+      type: object
+      required: [error, reason]
+      properties:
+        error:
+          type: string
+          examples: [not_found]
+        reason:
+          type: string
+          examples: ["No data for this date"]
