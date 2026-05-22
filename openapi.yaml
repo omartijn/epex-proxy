@@ -85,6 +85,31 @@ paths:
                           last_http_status: 400
                           last_error: "<html>No matching data found</html>"
 
+  /v1/areas:
+    get:
+      operationId: listAreas
+      tags: [meta]
+      summary: List configured areas
+      description: |
+        Returns all areas (bidding zones) that this instance is configured for,
+        with their display name and local timezone. Intended for UIs that need
+        to discover available areas without hardcoding them.
+      responses:
+        "200":
+          description: Area list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AreasResponse'
+              example:
+                areas:
+                  nl:
+                    name: Netherlands
+                    timezone: Europe/Amsterdam
+                  de:
+                    name: Germany
+                    timezone: Europe/Berlin
+
   /v1/{area}/providers:
     get:
       operationId: listProviders
@@ -538,6 +563,29 @@ components:
           description: Per-area health, keyed by area ID (e.g. `nl`).
           additionalProperties:
             $ref: '#/components/schemas/AreaHealth'
+
+    AreaInfo:
+      type: object
+      required: [name, timezone]
+      properties:
+        name:
+          type: string
+          description: Human-readable area name.
+          examples: [Netherlands]
+        timezone:
+          type: string
+          description: IANA timezone identifier for the area.
+          examples: [Europe/Amsterdam]
+
+    AreasResponse:
+      type: object
+      required: [areas]
+      properties:
+        areas:
+          type: object
+          description: Map of area ID to area info.
+          additionalProperties:
+            $ref: '#/components/schemas/AreaInfo'
 
     ErrorResponse:
       type: object

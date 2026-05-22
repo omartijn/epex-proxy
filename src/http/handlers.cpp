@@ -91,6 +91,21 @@ static http::response<http::string_body> handle_health(
     return json_response(http::status::ok, store.health_json, req);
 }
 
+static http::response<http::string_body> handle_areas(
+    const AppConfig&                        cfg,
+    const http::request<http::string_body>& req)
+{
+    json j;
+    j["areas"] = json::object();
+    for (const auto& [area_id, area] : cfg.areas) {
+        j["areas"][area_id] = {
+            {"name",     area.name},
+            {"timezone", area.timezone}
+        };
+    }
+    return json_response(http::status::ok, j.dump(), req);
+}
+
 static http::response<http::string_body> handle_providers(
     std::string_view                        area_id,
     const AppConfig&                        cfg,
@@ -140,10 +155,15 @@ http::response<http::string_body> handle_request(
 
     auto parts = split_path(path);
 
+    // /v1/areas
     // /v1/{area}/providers
     // /v1/{area}/raw/{date}
     // /v1/{area}/{provider}/{date}
     if (parts.size() >= 2 && parts[0] == "v1") {
+        if (parts.size() == 2 && parts[1] == "areas") {
+            return handle_areas(cfg, req);
+        }
+
         const auto& area_id = parts[1];
         auto acit = cfg.areas.find(area_id);
         if (acit == cfg.areas.end()) {
