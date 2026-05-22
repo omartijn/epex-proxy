@@ -1,3 +1,16 @@
 {env.EPEX_DOMAIN} {
-    reverse_proxy epex-proxy:8080
+
+    # API — strip the /api prefix and proxy to epex-proxy
+    handle /api/* {
+        uri strip_prefix /api
+        reverse_proxy epex-proxy:8080
+    }
+
+    # SPA — serve static files; unknown paths fall back to index.html
+    handle {
+        root * /srv/www
+        try_files {path} /index.html
+        file_server
+    }
+
 }

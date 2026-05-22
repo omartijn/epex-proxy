@@ -17,7 +17,9 @@ services:
       - web
 
   caddy:
-    image: caddy:2-alpine
+    build:
+      context: .
+      dockerfile: docker/caddy.Dockerfile
     container_name: caddy
     restart: unless-stopped
     environment:
