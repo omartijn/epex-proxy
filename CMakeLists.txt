@@ -122,6 +122,10 @@ target_compile_options(epex-proxy PRIVATE
         -Wnull-dereference
         -Wimplicit-fallthrough
         -Werror
+        # GCC false positive: -Wnull-dereference fires on Boost Beast/Asio code
+        # inlined at -O2/-O3 (https://github.com/chriskohlhoff/asio/issues/1616).
+        # Demote to warning so genuine null-deref issues in our code still surface.
+        -Wno-error=null-dereference
     >
     $<$<CXX_COMPILER_ID:MSVC>:
         /W4
