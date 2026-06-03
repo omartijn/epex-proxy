@@ -51,14 +51,42 @@ DayPrices parse_entsoe_xml(std::string_view xml, std::string_view date_local) {
 
             auto interval    = period.child("timeInterval");
             auto period_start = parse_timestamp(interval.child_value("start"));
+            auto period_end   = parse_timestamp(interval.child_value("end"));
 
             constexpr auto slot_dur = std::chrono::minutes{15};
-            for (auto point : period.children("Point")) {
-                int pos = std::stoi(point.child_value("position"));
+            auto total_slots = (period_end - period_start) / slot_dur;
+
+            // ENTSO-E publishes a sparse curve: a Point whose price equals the
+            // previous position's is omitted, and the value is carried forward
+            // until the next given position (and to the end of the period). So
+            // we backfill skipped positions with the last seen price rather
+            // than leaving gaps. total_slots comes from the timeInterval, so
+            // short (DST spring) and long (DST autumn) days fill correctly too.
+            auto emit = [&](long pos, double price) {
                 dp.slots.push_back({
                     .start    = period_start + slot_dur * (pos - 1),
-                    .epex_mwh = std::stod(point.child_value("price.amount")),
+                    .epex_mwh = price,
                 });
+            };
+
+            long   prev_pos   = 0;
+            double prev_price = 0.0;
+            for (auto point : period.children("Point")) {
+                long   pos   = std::stol(point.child_value("position"));
+                double price = std::stod(point.child_value("price.amount"));
+
+                for (long p = prev_pos + 1; p < pos; ++p) {  // backfill gaps
+                    emit(p, prev_price);
+                }
+                emit(pos, price);
+
+                prev_pos   = pos;
+                prev_price = price;
+            }
+
+            // Carry the final price forward to the end of the period.
+            for (long p = prev_pos + 1; p <= total_slots; ++p) {
+                emit(p, prev_price);
             }
         }
     }
