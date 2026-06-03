@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(epex-proxy VERSION 1.0.0 LANGUAGES CXX)
+project(epex-proxy VERSION 1.0.1 LANGUAGES CXX)
 
 cmake_policy(SET CMP0167 NEW)  # use BoostConfig, not legacy FindBoost
 

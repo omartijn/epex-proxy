@@ -194,10 +194,10 @@ generated from a template via `configure_file`, which bakes the binary path
 into the unit at configure time. Without it the `ExecStart=` line would point
 at the wrong location.
 
-This produces `build/epex-proxy-1.0.0-Linux.deb`. Install it:
+This produces `build/epex-proxy-1.0.1-Linux.deb`. Install it:
 
 ```sh
-sudo dpkg -i build/epex-proxy-1.0.0-Linux.deb
+sudo dpkg -i build/epex-proxy-1.0.1-Linux.deb
 ```
 
 The `postinst` script:
