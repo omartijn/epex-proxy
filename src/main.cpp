@@ -56,7 +56,12 @@ int main(int argc, char* argv[]) {
                 asio::detached);
         }
 
-        run_server(ioc, acceptors, store, cfg);
+        // Shared stop signal for HTTP sessions. Held "never expiring" until
+        // shutdown; sessions race their reads against it (see run_server).
+        asio::steady_timer shutdown_timer{ioc};
+        shutdown_timer.expires_at(asio::steady_timer::time_point::max());
+
+        run_server(ioc, acceptors, shutdown_timer, store, cfg);
 
         asio::signal_set signals(ioc, SIGINT, SIGTERM);
         signals.async_wait([&](boost::system::error_code ec, int sig) {
@@ -68,6 +73,9 @@ int main(int argc, char* argv[]) {
             for (auto& acc : acceptors) {
                 acc.cancel();
             }
+            // Expire (don't just cancel) so sessions that loop back to a fresh
+            // wait after this point still see the deadline already passed.
+            shutdown_timer.expires_at(asio::steady_timer::time_point::min());
             for (auto& [id, sigs] : area_signals) {
                 sigs.tomorrow_fetch.emit(asio::cancellation_type::terminal);
                 sigs.midnight.emit(asio::cancellation_type::terminal);
